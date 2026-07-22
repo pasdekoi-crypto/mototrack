@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- PWA / App Icon Meta Tags -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://placehold.co/192x192/f97316/ffffff?text=MT">
+    <link rel="manifest" href='data:application/manifest+json,{"name":"MotoTrack","short_name":"MotoTrack","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"https://placehold.co/192x192/f97316/ffffff?text=MT","sizes":"192x192","type":"image/png"}]}'>
+    
+    <title>MotoTrack - Motorrad Service</title>
+    <!-- Tailwind CSS für das Design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome für Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            500: '#f97316', // Orange
+                            600: '#ea580c',
+                        },
+                        dark: {
+                            bg: '#0f172a',
+                            card: '#1e293b',
+                            border: '#334155'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Verstecke Scrollbars für sauberes Mobile-Design */
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
+        body { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Smooth transitions for tabs */
+        .tab-content { display: none; animation: fadeIn 0.3s; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Print Styles für den Scheckheft-Export */
+        @media print {
+            body * { visibility: hidden; }
+            #print-section, #print-section * { visibility: visible; color: black !important; }
+            #print-section { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; background: white; }
+            .print-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .print-table th, .print-table td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            .print-table th { background-color: #eee !important; -webkit-print-color-adjust: exact; }
+            #print-section h2 { border-bottom: 2px solid #f97316; padding-bottom: 5px; margin-top: 30px; }
+        }
+    </style>
+</head>
+<body class="bg-dark-bg text-gray-200 font-sans min-h-screen pb-20">
+
+    <!-- Header -->
+    <header class="bg-dark-card border-b border-dark-border p-4 sticky top-0 z-50 shadow-md">
+        <div class="flex justify-between items-center max-w-md mx-auto">
+            <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-motorcycle text-brand-500"></i>
+                MotoTrack
+            </h1>
+            <div class="text-right">
+                <p class="text-xs text-gray-400">Tacho</p>
+                <p class="text-lg font-bold text-white"><span id="header-tacho">0</span> km</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="p-4 max-w-md mx-auto">
+
+        <!-- 1. DASHBOARD -->
+        <section id="view-dashboard" class="tab-content active space-y-4">
+            
+            <!-- Bike Info Card -->
+            <div class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg">
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center border-2 border-brand-500">
+                        <i class="fa-solid fa-motorcycle text-2xl text-gray-300"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Mein Motorrad</h2>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-xs bg-slate-700 px-2 py-1 rounded text-gray-300">Nächster TÜV:</span>
+                            <input type="month" id="tuv-input" class="bg-slate-900 border border-dark-border rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-brand-500" onchange="updateTuv()">
+                        </div>
+                        
+                        <!-- NEU: Fahrzeugschein & PDF Export Buttons -->
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="switchTab('fahrzeugschein')" class="bg-slate-700 hover:bg-slate-600 text-xs text-white py-1.5 px-3 rounded flex items-center gap-1 transition-colors">
+                                <i class="fa-solid fa-file-lines"></i> Fahrzeugdaten
+                            </button>
+                            <button onclick="exportScheckheft()" class="bg-brand-500 hover:bg-brand-600 text-xs text-white py-1.5 px-3 rounded flex items-center gap-1 transition-colors">
+                                <i class="fa-solid fa-file-pdf"></i> Scheckheft PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Maintenance Status (Die "FREE" Regel) -->
+            <div class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg">
+                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Service Status</h3>
+                <div id="service-status-container" class="flex flex-col gap-3">
+                    <!-- Wird per JS befüllt. Standard ist FREE -->
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg flex flex-col items-center justify-center text-center">
+                    <i class="fa-solid fa-gas-pump text-brand-500 text-xl mb-2"></i>
+                    <p class="text-xs text-gray-400">Tankkosten gesamt</p>
+                    <p class="text-lg font-bold text-white"><span id="dash-tankkosten">0</span> €</p>
+                    <p class="text-[10px] text-gray-500 mt-1">Ø <span id="dash-verbrauch">--</span> L/100km</p>
+                </div>
+                <div class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg flex flex-col items-center justify-center text-center">
+                    <i class="fa-solid fa-wrench text-brand-500 text-xl mb-2"></i>
+                    <p class="text-xs text-gray-400">Wartung & Rep.</p>
+                    <p class="text-lg font-bold text-white"><span id="dash-reparaturen">0</span> €</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. TANKEN -->
+        <section id="view-tanken" class="tab-content space-y-4">
+            <h2 class="text-xl font-bold text-white mb-4">Tankbuch</h2>
+            
+            <form id="form-tanken" class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Datum</label>
+                        <input type="date" id="tank-datum" required class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Tachostand (km)</label>
+                        <input type="number" id="tank-tacho" required class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Liter</label>
+                        <input type="number" step="0.01" id="tank-liter" required class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500" oninput="calcTank()">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">€ / Liter</label>
+                        <input type="number" step="0.01" id="tank-preis-liter" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500" oninput="calcTank()">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Gesamt (€)</label>
+                        <input type="number" step="0.01" id="tank-preis" required class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2 rounded-lg transition-colors mt-2">
+                    Tankfüllung speichern
+                </button>
+            </form>
+
+            <div id="list-tanken" class="space-y-2 mt-4">
+                <!-- Tank-Einträge -->
+            </div>
+        </section>
+
+        <!-- 3. WARTUNG & ÖL -->
+        <section id="view-wartung" class="tab-content space-y-4">
+            <h2 class="text-xl font-bold text-white mb-4">Service & Wartung</h2>
+            
+            <form id="form-wartung" class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg space-y-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Was wurde gemacht?</label>
+                    <select id="wartung-art" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                        <option value="Ölwechsel">Ölwechsel</option>
+                        <option value="Bremsflüssigkeit">Bremsflüssigkeit</option>
+                        <option value="Kettenkit">Kettenkit / Riemen</option>
+                        <option value="Reifenwechsel">Reifenwechsel</option>
+                        <option value="Inspektion">Allgemeine Inspektion</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Datum</label>
+                        <input type="date" id="wartung-datum" required class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Aktueller Tacho (km)</label>
+                        <input type="number" id="wartung-tacho" required class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Nächster Service bei <span class="text-gray-500 text-[10px]">(Opt.)</span></label>
+                        <input type="number" id="wartung-naechster" placeholder="z.B. 10000" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Kosten (€) <span class="text-gray-500 text-[10px]">(Opt.)</span></label>
+                        <input type="number" step="0.01" id="wartung-kosten" placeholder="0.00" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2 rounded-lg transition-colors mt-2">
+                    Service eintragen
+                </button>
+            </form>
+
+            <div id="list-wartung" class="space-y-2 mt-4">
+                <!-- Wartungs-Einträge -->
+            </div>
+        </section>
+
+        <!-- 4. REPARATUREN -->
+        <section id="view-reparaturen" class="tab-content space-y-4">
+            <h2 class="text-xl font-bold text-white mb-4">Reparaturen</h2>
+            
+            <form id="form-reparaturen" class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg space-y-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Was war kaputt / wurde repariert?</label>
+                    <input type="text" id="rep-besch" required placeholder="z.B. Blinker hinten links erneuert" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Kosten (€)</label>
+                        <input type="number" step="0.01" id="rep-kosten" required class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Datum</label>
+                        <input type="date" id="rep-datum" required class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-2 rounded-lg transition-colors mt-2">
+                    Reparatur protokollieren
+                </button>
+            </form>
+
+            <div id="list-reparaturen" class="space-y-2 mt-4">
+                <!-- Reparatur-Einträge -->
+            </div>
+        </section>
+
+        <!-- 5. FAHRZEUGSCHEIN (NEU) -->
+        <section id="view-fahrzeugschein" class="tab-content space-y-4">
+            <div class="flex items-center gap-3 mb-4">
+                <button onclick="switchTab('dashboard')" class="text-brand-500 p-2"><i class="fa-solid fa-arrow-left"></i> Zurück</button>
+                <h2 class="text-xl font-bold text-white">Fahrzeugdaten</h2>
+            </div>
+            
+            <div class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg space-y-4">
+                <p class="text-xs text-gray-400 mb-2">Hier hast du alle wichtigen Daten beim Teilekauf oder an der Tankstelle sofort griffbereit.</p>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2">
+                        <label class="block text-xs text-gray-400 mb-1">Hersteller & Modell</label>
+                        <input type="text" id="bike-modell" placeholder="z.B. Honda CB650R" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500" oninput="updateBikeData()">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Baujahr</label>
+                        <input type="number" id="bike-baujahr" placeholder="z.B. 2021" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500" oninput="updateBikeData()">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-gray-400 mb-1">Fahrgestellnummer (FIN)</label>
+                        <input type="text" id="bike-fin" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500 uppercase" oninput="updateBikeData()">
+                    </div>
+                    
+                    <div class="col-span-2 border-t border-slate-700 my-2 pt-4">
+                        <h3 class="text-sm font-bold text-white mb-3"><i class="fa-solid fa-gauge-high text-brand-500 mr-1"></i> Reifendruck & Flüssigkeiten</h3>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Reifen Vorne (bar)</label>
+                        <input type="number" step="0.1" id="bike-druck-vorn" placeholder="2.5" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500" oninput="updateBikeData()">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Reifen Hinten (bar)</label>
+                        <input type="number" step="0.1" id="bike-druck-hinten" placeholder="2.9" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500" oninput="updateBikeData()">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-gray-400 mb-1">Motoröl Sorte</label>
+                        <input type="text" id="bike-oel" placeholder="z.B. 10W-40 (Teilsynthetisch)" class="w-full bg-slate-900 border border-dark-border rounded-lg p-2 text-white focus:outline-none focus:border-brand-500" oninput="updateBikeData()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEU: Daten-Backup (JSON Export/Import) -->
+            <div class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg space-y-3">
+                <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-database text-brand-500 mr-1"></i> Daten-Backup</h3>
+                <p class="text-xs text-gray-400">Alle Daten werden nur im Browser gespeichert. Erstelle regelmäßig ein Backup, damit beim Löschen des Browser-Speichers nichts verloren geht.</p>
+                <div class="flex gap-2">
+                    <button onclick="exportData()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-xs text-white py-2 px-3 rounded flex items-center justify-center gap-1 transition-colors">
+                        <i class="fa-solid fa-download"></i> Backup exportieren
+                    </button>
+                    <button onclick="document.getElementById('import-file-input').click()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-xs text-white py-2 px-3 rounded flex items-center justify-center gap-1 transition-colors">
+                        <i class="fa-solid fa-upload"></i> Backup importieren
+                    </button>
+                    <input type="file" id="import-file-input" accept="application/json" class="hidden" onchange="importData(event)">
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Versteckter Bereich nur für den PDF/Druck-Export -->
+    <div id="print-section" class="hidden"></div>
+
+    <!-- Bottom Navigation (App-Feeling) -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-dark-card border-t border-dark-border pb-safe">
+        <div class="flex justify-around items-center max-w-md mx-auto">
+            <button onclick="switchTab('dashboard')" class="nav-btn p-3 flex flex-col items-center flex-1 text-brand-500" data-target="dashboard">
+                <i class="fa-solid fa-gauge text-xl mb-1"></i>
+                <span class="text-[10px] font-semibold">Home</span>
+            </button>
+            <button onclick="switchTab('tanken')" class="nav-btn p-3 flex flex-col items-center flex-1 text-gray-500 hover:text-gray-300" data-target="tanken">
+                <i class="fa-solid fa-gas-pump text-xl mb-1"></i>
+                <span class="text-[10px] font-semibold">Tanken</span>
+            </button>
+            <button onclick="switchTab('wartung')" class="nav-btn p-3 flex flex-col items-center flex-1 text-gray-500 hover:text-gray-300" data-target="wartung">
+                <i class="fa-solid fa-wrench text-xl mb-1"></i>
+                <span class="text-[10px] font-semibold">Service</span>
+            </button>
+            <button onclick="switchTab('reparaturen')" class="nav-btn p-3 flex flex-col items-center flex-1 text-gray-500 hover:text-gray-300" data-target="reparaturen">
+                <i class="fa-solid fa-triangle-exclamation text-xl mb-1"></i>
+                <span class="text-[10px] font-semibold">Reparatur</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- JavaScript Logik -->
+    <script>
+        // --- Datenstruktur (Local Storage) ---
+        let appData = {
+            tacho: 0,
+            tuv: "",
+            bikeDetails: {
+                modell: "",
+                baujahr: "",
+                fin: "",
+                druckVorn: "",
+                druckHinten: "",
+                oel: ""
+            },
+            tanken: [],
+            wartung: [],
+            reparaturen: []
+        };
+
+        // --- Initialisierung ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            // Fallback falls alte Daten geladen wurden, die noch kein bikeDetails haben
+            if(!appData.bikeDetails) {
+                appData.bikeDetails = { modell: "", baujahr: "", fin: "", druckVorn: "", druckHinten: "", oel: "" };
+            }
+            document.getElementById('rep-datum').valueAsDate = new Date(); // Heute als Standard
+            document.getElementById('tank-datum').valueAsDate = new Date(); // Heute als Standard
+            document.getElementById('wartung-datum').valueAsDate = new Date(); // Heute als Standard
+            renderAll();
+        });
+
+        function loadData() {
+            const saved = localStorage.getItem('motoTrackData');
+            if (saved) {
+                appData = JSON.parse(saved);
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('motoTrackData', JSON.stringify(appData));
+            renderAll();
+        }
+
+        // --- Sicherheit: Freitext escapen bevor er per innerHTML eingefügt wird ---
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // --- Daten-Backup: JSON Export / Import ---
+        function exportData() {
+            const dataStr = JSON.stringify(appData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mototrack-backup-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (!confirm('Aktuelle Daten mit dieser Backup-Datei überschreiben?')) return;
+                    appData = imported;
+                    if (!appData.bikeDetails) {
+                        appData.bikeDetails = { modell: "", baujahr: "", fin: "", druckVorn: "", druckHinten: "", oel: "" };
+                    }
+                    saveData();
+                    alert('Daten erfolgreich importiert!');
+                } catch (err) {
+                    alert('Fehler beim Import: Die Datei ist kein gültiges Backup.');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset, damit dieselbe Datei erneut gewählt werden kann
+        }
+
+        // --- UI Steuerung (Tabs) ---
+        function switchTab(tabId) {
+            // Verstecke alle
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(el => {
+                el.classList.remove('text-brand-500');
+                el.classList.add('text-gray-500');
+            });
+
+            // Zeige gewählten
+            document.getElementById('view-' + tabId).classList.add('active');
+            
+            // Nav-Button markieren (nur wenn vorhanden)
+            const navBtn = document.querySelector(`.nav-btn[data-target="${tabId}"]`);
+            if (navBtn) {
+                navBtn.classList.add('text-brand-500');
+                navBtn.classList.remove('text-gray-500');
+            }
+            
+            // Auto-Fülle Tacho-Felder beim Wechsel
+            if(tabId === 'tanken') document.getElementById('tank-tacho').value = appData.tacho;
+            if(tabId === 'wartung') document.getElementById('wartung-tacho').value = appData.tacho;
+        }
+
+        // --- Update Tacho ---
+        function updateTachoGlobal(neuerWert) {
+            if(parseInt(neuerWert) > appData.tacho) {
+                appData.tacho = parseInt(neuerWert);
+            }
+        }
+
+        // --- Hilfsfunktion Tankrechner ---
+        function calcTank() {
+            const l = parseFloat(document.getElementById('tank-liter').value) || 0;
+            const p = parseFloat(document.getElementById('tank-preis-liter').value) || 0;
+            if(l > 0 && p > 0) {
+                document.getElementById('tank-preis').value = (l * p).toFixed(2);
+            }
+        }
+
+        // --- Event Listener für Formulare ---
+        
+        // 1. TÜV
+        function updateTuv() {
+            appData.tuv = document.getElementById('tuv-input').value;
+            saveData();
+        }
+
+        // NEU: Fahrzeugdaten aktualisieren
+        function updateBikeData() {
+            appData.bikeDetails.modell = document.getElementById('bike-modell').value;
+            appData.bikeDetails.baujahr = document.getElementById('bike-baujahr').value;
+            appData.bikeDetails.fin = document.getElementById('bike-fin').value;
+            appData.bikeDetails.druckVorn = document.getElementById('bike-druck-vorn').value;
+            appData.bikeDetails.druckHinten = document.getElementById('bike-druck-hinten').value;
+            appData.bikeDetails.oel = document.getElementById('bike-oel').value;
+            saveData();
+        }
+
+        // NEU: Scheckheft Export (PDF/Drucken)
+        function exportScheckheft() {
+            const printDiv = document.getElementById('print-section');
+            const datumHeute = new Date().toLocaleDateString('de-DE');
+            
+            // Wartungen als HTML Tabelle
+            let wartungRows = appData.wartung.map(w => `
+                <tr>
+                    <td>${w.datum}</td>
+                    <td>${w.tacho} km</td>
+                    <td><strong>${w.art}</strong></td>
+                    <td>${w.naechster ? w.naechster + ' km' : '-'}</td>
+                    <td>${w.kosten ? w.kosten.toFixed(2) + ' €' : '-'}</td>
+                </tr>
+            `).join('');
+            if(appData.wartung.length === 0) wartungRows = '<tr><td colspan="5">Keine Einträge vorhanden.</td></tr>';
+
+            // Reparaturen als HTML Tabelle
+            let repRows = appData.reparaturen.map(r => `
+                <tr>
+                    <td>${r.datum}</td>
+                    <td>${escapeHtml(r.besch)}</td>
+                    <td>${r.kosten.toFixed(2)} €</td>
+                </tr>
+            `).join('');
+            if(appData.reparaturen.length === 0) repRows = '<tr><td colspan="3">Keine Einträge vorhanden.</td></tr>';
+
+            const bikeName = escapeHtml(appData.bikeDetails.modell || "Mein Motorrad");
+            const fin = escapeHtml(appData.bikeDetails.fin || "Nicht eingetragen");
+
+            printDiv.innerHTML = `
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h1 style="font-size: 28px; color: #f97316;">MotoTrack Service-Heft</h1>
+                    <p>Fahrzeug: <strong>${bikeName}</strong> (FIN: ${fin})</p>
+                    <p>Stand: ${datumHeute} | Aktueller Tacho: ${appData.tacho} km</p>
+                </div>
+
+                <h2>Wartung & Inspektionen</h2>
+                <table class="print-table">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Tachostand</th>
+                            <th>Service-Art</th>
+                            <th>Nächster Service</th>
+                            <th>Kosten</th>
+                        </tr>
+                    </thead>
+                    <tbody>${wartungRows}</tbody>
+                </table>
+
+                <h2>Reparatur-Historie</h2>
+                <table class="print-table">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Beschreibung</th>
+                            <th>Kosten (€)</th>
+                        </tr>
+                    </thead>
+                    <tbody>${repRows}</tbody>
+                </table>
+            `;
+
+            // Druckdialog öffnen (Auf dem Handy fragt er nach "als PDF speichern" oder "Drucken")
+            window.print();
+        }
+
+        // 2. Tanken
+        document.getElementById('form-tanken').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const t = document.getElementById('tank-tacho').value;
+            updateTachoGlobal(t);
+            
+            const datumWert = new Date(document.getElementById('tank-datum').value).toLocaleDateString('de-DE');
+            
+            appData.tanken.unshift({
+                id: Date.now(),
+                datum: datumWert,
+                tacho: parseInt(t),
+                liter: parseFloat(document.getElementById('tank-liter').value),
+                preis: parseFloat(document.getElementById('tank-preis').value)
+            });
+            
+            e.target.reset();
+            document.getElementById('tank-datum').valueAsDate = new Date();
+            saveData();
+            switchTab('dashboard');
+        });
+
+        // 3. Wartung
+        document.getElementById('form-wartung').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const t = document.getElementById('wartung-tacho').value;
+            updateTachoGlobal(t);
+            
+            const datumWert = new Date(document.getElementById('wartung-datum').value).toLocaleDateString('de-DE');
+            
+            appData.wartung.unshift({
+                id: Date.now(),
+                datum: datumWert,
+                art: document.getElementById('wartung-art').value,
+                tacho: parseInt(t),
+                naechster: document.getElementById('wartung-naechster').value ? parseInt(document.getElementById('wartung-naechster').value) : null,
+                kosten: parseFloat(document.getElementById('wartung-kosten').value) || 0
+            });
+            
+            e.target.reset();
+            document.getElementById('wartung-datum').valueAsDate = new Date();
+            saveData();
+            switchTab('dashboard');
+        });
+
+        // 4. Reparatur
+        document.getElementById('form-reparaturen').addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            appData.reparaturen.unshift({
+                id: Date.now(),
+                datum: new Date(document.getElementById('rep-datum').value).toLocaleDateString('de-DE'),
+                besch: document.getElementById('rep-besch').value,
+                kosten: parseFloat(document.getElementById('rep-kosten').value)
+            });
+            
+            e.target.reset();
+            document.getElementById('rep-datum').valueAsDate = new Date();
+            saveData();
+            switchTab('dashboard');
+        });
+
+        // --- Render Funktionen ---
+        function renderAll() {
+            // Header
+            document.getElementById('header-tacho').innerText = appData.tacho.toLocaleString('de-DE');
+            document.getElementById('tuv-input').value = appData.tuv;
+
+            // Fahrzeugdaten laden
+            if(appData.bikeDetails) {
+                document.getElementById('bike-modell').value = appData.bikeDetails.modell || '';
+                document.getElementById('bike-baujahr').value = appData.bikeDetails.baujahr || '';
+                document.getElementById('bike-fin').value = appData.bikeDetails.fin || '';
+                document.getElementById('bike-druck-vorn').value = appData.bikeDetails.druckVorn || '';
+                document.getElementById('bike-druck-hinten').value = appData.bikeDetails.druckHinten || '';
+                document.getElementById('bike-oel').value = appData.bikeDetails.oel || '';
+            }
+
+            renderDashboard();
+            renderListen();
+        }
+
+        function renderDashboard() {
+            // -- Service Status Logik (Die "FREE" Regel) --
+            const statusContainer = document.getElementById('service-status-container');
+            statusContainer.innerHTML = '';
+
+            // Suche nach anstehenden Services (nur der jeweils neueste Eintrag pro Service-Art zählt,
+            // sonst bleiben längst erledigte Services für immer als "überfällig" stehen)
+            let neuesterProArt = {};
+            appData.wartung.forEach(w => {
+                if (!neuesterProArt[w.art] || w.tacho > neuesterProArt[w.art].tacho) {
+                    neuesterProArt[w.art] = w;
+                }
+            });
+            let anstehendeServices = [];
+            Object.values(neuesterProArt).forEach(w => {
+                if (w.naechster) {
+                    const diff = w.naechster - appData.tacho;
+                    if (diff <= 1000) { // Warnung, wenn weniger als 1000km bis zum nächsten Service
+                        anstehendeServices.push({ art: w.art, fälligBei: w.naechster, diff: diff });
+                    }
+                }
+            });
+
+            // NEU: TÜV Check
+            let hasTuvWarning = false;
+            let tuvWarningHtml = '';
+            if (appData.tuv) {
+                const today = new Date();
+                const currentYear = today.getFullYear();
+                const currentMonth = today.getMonth() + 1; // 1-12
+
+                const [tuvYearStr, tuvMonthStr] = appData.tuv.split('-');
+                const tuvYear = parseInt(tuvYearStr);
+                const tuvMonth = parseInt(tuvMonthStr);
+
+                const monthsDiff = (tuvYear - currentYear) * 12 + (tuvMonth - currentMonth);
+
+                if (monthsDiff < 0) {
+                    hasTuvWarning = true;
+                    tuvWarningHtml = `
+                        <div class="flex items-center justify-between p-3 border rounded-lg text-red-500 bg-red-900/30 border-red-800">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                                <div>
+                                    <p class="font-bold text-sm text-gray-200">TÜV / HU</p>
+                                    <p class="text-xs opacity-80">Abgelaufen seit ${Math.abs(monthsDiff)} Monat(en)!</p>
+                                </div>
+                            </div>
+                            <span class="text-sm font-bold opacity-70">${tuvMonthStr}/${tuvYearStr}</span>
+                        </div>
+                    `;
+                } else if (monthsDiff === 0) {
+                    hasTuvWarning = true;
+                    tuvWarningHtml = `
+                        <div class="flex items-center justify-between p-3 border rounded-lg text-red-400 bg-red-900/20 border-red-700">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid fa-circle-exclamation text-lg"></i>
+                                <div>
+                                    <p class="font-bold text-sm text-gray-200">TÜV / HU</p>
+                                    <p class="text-xs opacity-80">Diesen Monat fällig!</p>
+                                </div>
+                            </div>
+                            <span class="text-sm font-bold opacity-70">${tuvMonthStr}/${tuvYearStr}</span>
+                        </div>
+                    `;
+                } else if (monthsDiff <= 2) {
+                    hasTuvWarning = true;
+                    tuvWarningHtml = `
+                        <div class="flex items-center justify-between p-3 border rounded-lg text-amber-500 bg-amber-900/30 border-amber-800">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid fa-clock text-lg"></i>
+                                <div>
+                                    <p class="font-bold text-sm text-gray-200">TÜV / HU</p>
+                                    <p class="text-xs opacity-80">Fällig in ${monthsDiff} Monat(en)</p>
+                                </div>
+                            </div>
+                            <span class="text-sm font-bold opacity-70">${tuvMonthStr}/${tuvYearStr}</span>
+                        </div>
+                    `;
+                }
+            }
+
+            if (anstehendeServices.length === 0 && !hasTuvWarning) {
+                // Regel angewendet: Keine Einträge oder nichts fällig -> FREE
+                statusContainer.innerHTML = `
+                    <div class="flex items-center justify-center p-4 bg-emerald-900/30 border border-emerald-800 rounded-lg">
+                        <div class="text-center">
+                            <i class="fa-solid fa-check-circle text-emerald-500 text-3xl mb-2"></i>
+                            <h4 class="text-emerald-400 font-bold text-lg tracking-widest">FREE</h4>
+                            <p class="text-xs text-emerald-600 mt-1">Keine Wartung aktuell fällig.</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Zeige anstehende Services an
+                if (hasTuvWarning) {
+                    statusContainer.innerHTML += tuvWarningHtml;
+                }
+
+                anstehendeServices.forEach(srv => {
+                    const isOverdue = srv.diff < 0;
+                    const colorClass = isOverdue ? 'text-red-500 bg-red-900/30 border-red-800' : 'text-amber-500 bg-amber-900/30 border-amber-800';
+                    const icon = isOverdue ? 'fa-triangle-exclamation' : 'fa-clock';
+                    const text = isOverdue ? `Überfällig seit ${Math.abs(srv.diff)} km` : `In ${srv.diff} km fällig`;
+
+                    statusContainer.innerHTML += `
+                        <div class="flex items-center justify-between p-3 border rounded-lg ${colorClass}">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid ${icon} text-lg"></i>
+                                <div>
+                                    <p class="font-bold text-sm text-gray-200">${srv.art}</p>
+                                    <p class="text-xs opacity-80">${text}</p>
+                                </div>
+                            </div>
+                            <span class="text-sm font-bold opacity-70">Bei ${srv.fälligBei}</span>
+                        </div>
+                    `;
+                });
+            }
+
+            // -- Durchschnittsverbrauch --
+            let avgStr = "--";
+            if (appData.tanken.length >= 2) {
+                // Einfache Berechnung: Letzter Tankvorgang - Vorletzter Tankvorgang
+                const last = appData.tanken[0];
+                const prev = appData.tanken[1];
+                const kmGefahren = last.tacho - prev.tacho;
+                if (kmGefahren > 0) {
+                    const verbrauch = (last.liter / kmGefahren) * 100;
+                    avgStr = verbrauch.toFixed(1);
+                }
+            }
+            document.getElementById('dash-verbrauch').innerText = avgStr;
+
+            // -- Tankkosten gesamt --
+            const totalTanken = appData.tanken.reduce((sum, item) => sum + item.preis, 0);
+            document.getElementById('dash-tankkosten').innerText = totalTanken.toFixed(2).replace('.', ',');
+
+            // -- Werkstattkosten gesamt (Reparatur + Wartung) --
+            const totalRep = appData.reparaturen.reduce((sum, item) => sum + (item.kosten || 0), 0);
+            const totalWartung = appData.wartung.reduce((sum, item) => sum + (item.kosten || 0), 0);
+            const gesamtKosten = totalRep + totalWartung;
+            document.getElementById('dash-reparaturen').innerText = gesamtKosten.toFixed(2).replace('.', ',');
+        }
+
+        function renderListen() {
+            // Tanken Liste
+            const lTanken = document.getElementById('list-tanken');
+            lTanken.innerHTML = appData.tanken.map(t => `
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
+                    <div>
+                        <p class="text-sm font-bold">${t.datum}</p>
+                        <p class="text-xs text-gray-400">${t.tacho} km</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-bold text-brand-500">${t.liter} L</p>
+                        <p class="text-xs text-gray-400">${parseFloat(t.preis).toFixed(2)} €</p>
+                    </div>
+                    <button onclick="deleteEntry('tanken', ${t.id})" class="text-red-500 hover:text-red-400 p-2"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `).join('');
+
+            // Wartung Liste
+            const lWartung = document.getElementById('list-wartung');
+            lWartung.innerHTML = appData.wartung.map(w => `
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-brand-500">${w.art}</p>
+                        <p class="text-xs text-gray-400">${w.datum} • bei ${w.tacho} km</p>
+                    </div>
+                    <div class="text-right">
+                        ${w.kosten ? `<p class="text-sm font-bold text-red-400">-${w.kosten.toFixed(2)} €</p>` : ''}
+                        ${w.naechster ? `<p class="text-[10px] bg-slate-900 px-1 py-0.5 rounded border border-slate-700 mt-1 text-gray-400">Nächster:<br>${w.naechster} km</p>` : ''}
+                    </div>
+                    <button onclick="deleteEntry('wartung', ${w.id})" class="text-red-500 hover:text-red-400 p-2 ml-2"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `).join('');
+
+            // Reparaturen Liste
+            const lRep = document.getElementById('list-reparaturen');
+            lRep.innerHTML = appData.reparaturen.map(r => `
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="text-sm font-bold">${escapeHtml(r.besch)}</p>
+                        <p class="text-xs text-gray-400">${r.datum}</p>
+                    </div>
+                    <div class="text-right mx-3">
+                        <p class="text-sm font-bold text-red-400">-${r.kosten} €</p>
+                    </div>
+                    <button onclick="deleteEntry('reparaturen', ${r.id})" class="text-red-500 hover:text-red-400 p-2"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `).join('');
+        }
+
+        // Löschen von Einträgen
+        function deleteEntry(type, id) {
+            appData[type] = appData[type].filter(item => item.id !== id);
+            saveData();
+        }
+
+    </script>
+</body>
+</html>
