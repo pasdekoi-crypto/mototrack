@@ -62,14 +62,27 @@
 
     <!-- Header -->
     <header class="bg-dark-card border-b border-dark-border p-4 sticky top-0 z-50 shadow-md">
-        <div class="flex justify-between items-center max-w-md mx-auto">
-            <h1 class="text-xl font-bold text-white flex items-center gap-2">
-                <i class="fa-solid fa-motorcycle text-brand-500"></i>
-                MotoTrack
-            </h1>
-            <div class="text-right">
-                <p class="text-xs text-gray-400">Tacho</p>
-                <p class="text-lg font-bold text-white"><span id="header-tacho">0</span> km</p>
+        <div class="max-w-md mx-auto">
+            <div class="flex justify-between items-center">
+                <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-motorcycle text-brand-500"></i>
+                    MotoTrack
+                </h1>
+                <div class="flex items-center gap-2">
+                    <div class="text-right">
+                        <p class="text-xs text-gray-400">Tacho</p>
+                        <p class="text-lg font-bold text-white"><span id="header-tacho">0</span> km</p>
+                    </div>
+                    <button onclick="manualSave()" title="Jetzt speichern" class="bg-slate-700 hover:bg-brand-500 text-white w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+                <select id="bike-selector" onchange="switchBike(this.value)" class="flex-1 min-w-0 bg-slate-900 border border-dark-border rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-brand-500"></select>
+                <button onclick="addBike()" title="Neues Motorrad hinzufügen" class="bg-slate-700 hover:bg-slate-600 text-white text-xs py-1 px-2 rounded flex items-center gap-1 transition-colors shrink-0">
+                    <i class="fa-solid fa-plus"></i> Motorrad
+                </button>
             </div>
         </div>
     </header>
@@ -87,7 +100,7 @@
                         <i class="fa-solid fa-motorcycle text-2xl text-gray-300"></i>
                     </div>
                     <div>
-                        <h2 class="text-lg font-bold text-white">Mein Motorrad</h2>
+                        <h2 class="text-lg font-bold text-white" id="dashboard-bikename">Mein Motorrad</h2>
                         <div class="flex items-center gap-2 mt-1">
                             <span class="text-xs bg-slate-700 px-2 py-1 rounded text-gray-300">Nächster TÜV:</span>
                             <input type="month" id="tuv-input" class="bg-slate-900 border border-dark-border rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-brand-500" onchange="updateTuv()">
@@ -249,7 +262,23 @@
                 <button onclick="switchTab('dashboard')" class="text-brand-500 p-2"><i class="fa-solid fa-arrow-left"></i> Zurück</button>
                 <h2 class="text-xl font-bold text-white">Fahrzeugdaten</h2>
             </div>
-            
+
+            <!-- NEU: Motorrad-Verwaltung -->
+            <div class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg flex items-center justify-between gap-2">
+                <div>
+                    <p class="text-xs text-gray-400">Aktuelles Motorrad</p>
+                    <p class="text-sm font-bold text-white" id="fahrzeugschein-bikename">Motorrad 1</p>
+                </div>
+                <div class="flex gap-2 shrink-0">
+                    <button onclick="renameBike()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs py-1.5 px-3 rounded transition-colors">
+                        <i class="fa-solid fa-pen"></i> Umbenennen
+                    </button>
+                    <button onclick="deleteBike()" class="bg-red-900/40 hover:bg-red-900/60 text-red-400 text-xs py-1.5 px-3 rounded transition-colors">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+
             <div class="bg-dark-card rounded-xl p-4 border border-dark-border shadow-lg space-y-4">
                 <p class="text-xs text-gray-400 mb-2">Hier hast du alle wichtigen Daten beim Teilekauf oder an der Tankstelle sofort griffbereit.</p>
                 
@@ -307,6 +336,11 @@
     <!-- Versteckter Bereich nur für den PDF/Druck-Export -->
     <div id="print-section" class="hidden"></div>
 
+    <!-- Speichern-Bestätigung -->
+    <div id="save-toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-lg flex items-center gap-2 opacity-0 translate-y-4 transition-all duration-300 pointer-events-none z-50">
+        <i class="fa-solid fa-check-circle"></i> Gespeichert
+    </div>
+
     <!-- Bottom Navigation (App-Feeling) -->
     <nav class="fixed bottom-0 left-0 right-0 bg-dark-card border-t border-dark-border pb-safe">
         <div class="flex justify-around items-center max-w-md mx-auto">
@@ -331,46 +365,127 @@
 
     <!-- JavaScript Logik -->
     <script>
-        // --- Datenstruktur (Local Storage) ---
-        let appData = {
-            tacho: 0,
-            tuv: "",
-            bikeDetails: {
-                modell: "",
-                baujahr: "",
-                fin: "",
-                druckVorn: "",
-                druckHinten: "",
-                oel: ""
-            },
-            tanken: [],
-            wartung: [],
-            reparaturen: []
+        // --- Datenstruktur (Mehrere Motorräder, Local Storage) ---
+        function emptyBike(name) {
+            return {
+                name: name,
+                tacho: 0,
+                tuv: "",
+                bikeDetails: { modell: "", baujahr: "", fin: "", druckVorn: "", druckHinten: "", oel: "" },
+                tanken: [],
+                wartung: [],
+                reparaturen: []
+            };
+        }
+
+        let store = {
+            activeBikeId: "bike-1",
+            bikes: { "bike-1": emptyBike("Motorrad 1") }
         };
+        let appData = store.bikes[store.activeBikeId];
 
         // --- Initialisierung ---
         document.addEventListener('DOMContentLoaded', () => {
             loadData();
-            // Fallback falls alte Daten geladen wurden, die noch kein bikeDetails haben
-            if(!appData.bikeDetails) {
-                appData.bikeDetails = { modell: "", baujahr: "", fin: "", druckVorn: "", druckHinten: "", oel: "" };
-            }
             document.getElementById('rep-datum').valueAsDate = new Date(); // Heute als Standard
             document.getElementById('tank-datum').valueAsDate = new Date(); // Heute als Standard
             document.getElementById('wartung-datum').valueAsDate = new Date(); // Heute als Standard
             renderAll();
         });
 
+        // Wandelt ein altes Einzel-Motorrad-Datenformat in das neue Mehr-Motorrad-Format um
+        function migrateSingleBike(oldData) {
+            const migrated = emptyBike(oldData.bikeDetails?.modell || "Motorrad 1");
+            Object.assign(migrated, oldData);
+            migrated.name = oldData.bikeDetails?.modell || "Motorrad 1";
+            return { activeBikeId: "bike-1", bikes: { "bike-1": migrated } };
+        }
+
         function loadData() {
             const saved = localStorage.getItem('motoTrackData');
-            if (saved) {
-                appData = JSON.parse(saved);
+            if (!saved) return;
+            const parsed = JSON.parse(saved);
+            store = parsed.bikes ? parsed : migrateSingleBike(parsed);
+
+            if (!store.bikes[store.activeBikeId]) {
+                store.activeBikeId = Object.keys(store.bikes)[0];
+            }
+            appData = store.bikes[store.activeBikeId];
+            if (!appData.bikeDetails) {
+                appData.bikeDetails = { modell: "", baujahr: "", fin: "", druckVorn: "", druckHinten: "", oel: "" };
             }
         }
 
-        function saveData() {
-            localStorage.setItem('motoTrackData', JSON.stringify(appData));
+        function saveData(silent) {
+            localStorage.setItem('motoTrackData', JSON.stringify(store));
             renderAll();
+            if (!silent) showSaveToast();
+        }
+
+        function manualSave() {
+            saveData();
+        }
+
+        let saveToastTimeout = null;
+        function showSaveToast() {
+            const toast = document.getElementById('save-toast');
+            toast.classList.remove('opacity-0', 'translate-y-4');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            clearTimeout(saveToastTimeout);
+            saveToastTimeout = setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-4');
+            }, 1800);
+        }
+
+        // --- Motorrad-Verwaltung ---
+        function renderBikeSelector() {
+            const sel = document.getElementById('bike-selector');
+            sel.innerHTML = Object.keys(store.bikes).map(id =>
+                `<option value="${escapeHtml(id)}" ${id === store.activeBikeId ? 'selected' : ''}>${escapeHtml(store.bikes[id].name)}</option>`
+            ).join('');
+            const fahrzeugscheinName = document.getElementById('fahrzeugschein-bikename');
+            if (fahrzeugscheinName) fahrzeugscheinName.innerText = appData.name;
+            const dashboardName = document.getElementById('dashboard-bikename');
+            if (dashboardName) dashboardName.innerText = appData.name;
+        }
+
+        function switchBike(id) {
+            if (!store.bikes[id]) return;
+            store.activeBikeId = id;
+            appData = store.bikes[id];
+            renderAll();
+        }
+
+        function addBike() {
+            const name = prompt('Name für das neue Motorrad (z.B. "Ducati Monster"):');
+            if (!name) return;
+            const id = 'bike-' + Date.now();
+            store.bikes[id] = emptyBike(name);
+            store.activeBikeId = id;
+            appData = store.bikes[id];
+            saveData();
+        }
+
+        function renameBike() {
+            const neuerName = prompt('Neuer Name:', appData.name);
+            if (!neuerName) return;
+            appData.name = neuerName;
+            saveData();
+        }
+
+        function deleteBike() {
+            const ids = Object.keys(store.bikes);
+            if (ids.length <= 1) {
+                alert('Das letzte Motorrad kann nicht gelöscht werden.');
+                return;
+            }
+            if (!confirm(`"${appData.name}" wirklich löschen? Alle Einträge dazu gehen verloren.`)) return;
+            delete store.bikes[store.activeBikeId];
+            store.activeBikeId = Object.keys(store.bikes)[0];
+            appData = store.bikes[store.activeBikeId];
+            saveData();
+            switchTab('dashboard');
         }
 
         // --- Sicherheit: Freitext escapen bevor er per innerHTML eingefügt wird ---
@@ -386,7 +501,7 @@
 
         // --- Daten-Backup: JSON Export / Import ---
         function exportData() {
-            const dataStr = JSON.stringify(appData, null, 2);
+            const dataStr = JSON.stringify(store, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -404,7 +519,11 @@
                 try {
                     const imported = JSON.parse(e.target.result);
                     if (!confirm('Aktuelle Daten mit dieser Backup-Datei überschreiben?')) return;
-                    appData = imported;
+                    store = imported.bikes ? imported : migrateSingleBike(imported);
+                    if (!store.bikes[store.activeBikeId]) {
+                        store.activeBikeId = Object.keys(store.bikes)[0];
+                    }
+                    appData = store.bikes[store.activeBikeId];
                     if (!appData.bikeDetails) {
                         appData.bikeDetails = { modell: "", baujahr: "", fin: "", druckVorn: "", druckHinten: "", oel: "" };
                     }
@@ -474,7 +593,7 @@
             appData.bikeDetails.druckVorn = document.getElementById('bike-druck-vorn').value;
             appData.bikeDetails.druckHinten = document.getElementById('bike-druck-hinten').value;
             appData.bikeDetails.oel = document.getElementById('bike-oel').value;
-            saveData();
+            saveData(true);
         }
 
         // NEU: Scheckheft Export (PDF/Drucken)
@@ -609,6 +728,8 @@
 
         // --- Render Funktionen ---
         function renderAll() {
+            renderBikeSelector();
+
             // Header
             document.getElementById('header-tacho').innerText = appData.tacho.toLocaleString('de-DE');
             document.getElementById('tuv-input').value = appData.tuv;
